@@ -3,6 +3,7 @@
 
 #include <systemc>
 #include <systemc.h>
+#include <stdint.h>
 using namespace sc_core;
 
 SC_MODULE(FLOATING_POINT_UNIT) {
