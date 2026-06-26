@@ -109,39 +109,7 @@ uint32_t FPOps::execute(
         );
 
         case OP_FMUL:
-        if ((utils.isZero(r1) && utils.isNaN(r2)) ||
-            (utils.isNaN(r1) && utils.isZero(r2))) {
-                uint32_t zeroResult;
-
-                if (utils.isZero(r1)) {
-                    if (utils.getSign(r1)) {
-                        zeroResult = utils.getNegativeZero();
-                    } 
-                    else {
-                        zeroResult = utils.getPositiveZero();
-                    }
-                }
-                else {
-                    if (utils.getSign(r2)) {
-                        zeroResult = utils.getNegativeZero();
-                    }
-                    else {
-                        zeroResult = utils.getPositiveZero();
-                    }
-
-                    return finalResult(
-                        zeroResult,
-                        utils,
-                        zero,
-                        sign,
-                        overflow,
-                        underflow,
-                        inexact,
-                        nan
-                    );
-                }
-
-                return finalComputedResult(
+        return finalComputedResult(
                     a*b,
                     utils,
                     roundMode,
@@ -152,7 +120,7 @@ uint32_t FPOps::execute(
                     inexact,
                     nan
                 );
-        }
+
         case OP_FMIN:
         if (utils.isNaN(r1) && utils.isNaN(r2)) {
             return finalResult(
