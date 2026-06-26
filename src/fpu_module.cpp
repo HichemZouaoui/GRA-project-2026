@@ -1,4 +1,5 @@
 #include "fpu_module.hpp"
+#include "fp_ops.h"
 
 void FLOATING_POINT_UNIT::behaviour() {
     while(true) {
@@ -6,26 +7,39 @@ void FLOATING_POINT_UNIT::behaviour() {
 
         uint32_t input1 = r1.read();
         uint32_t input2 = r2.read();
+        uint32_t input3 = r3.read();
         uint32_t currentOp = op.read().to_uint();
 
-        uint32_t result = 0;
+        bool zeroFlag = false;
+        bool signFlag = false;
+        bool overflowFlag = false;
+        bool underflowFlag = false;
+        bool inexactFlag = false;
+        bool nanFlag = false;
 
-        switch(currentOp) {
-            case OP_FADD:
-                result = input1 + input2;
-                break;
+        FPUtils utils(sizeExponent, sizeMantissa);
 
-            default:
-                result = 0;
-                break;
-        }
+        uint32_t result = FPOps::execute(
+            currentOp,
+            input1,
+            input2,
+            input3,
+            utils,
+            roundMode,
+            zeroFlag,
+            signFlag,
+            overflowFlag,
+            underflowFlag,
+            inexactFlag,
+            nanFlag
+        );
         ro.write(result);
 
-        zero.write(result == 0);
-        sign.write((result >> 31) & 1);
-        overflow.write(false);
-        underflow.write(false);
-        inexact.write(false);
-        nan.write(false);
+        zero.write(zeroFlag);
+        sign.write(signFlag);
+        overflow.write(overflowFlag);
+        underflow.write(underflowFlag);
+        inexact.write(inexactFlag);
+        nan.write(nanFlag);
     }
 }

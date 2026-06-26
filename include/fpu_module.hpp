@@ -21,6 +21,10 @@ SC_MODULE(FLOATING_POINT_UNIT) {
     sc_out<bool> inexact;
     sc_out<bool> nan;
 
+    uint8_t sizeExponent = 8;
+    uint8_t sizeMantissa = 23;
+    uint8_t roundMode = 0;
+
     SC_CTOR(FLOATING_POINT_UNIT) {
         SC_THREAD(behaviour);
         sensitive << clk.pos();
