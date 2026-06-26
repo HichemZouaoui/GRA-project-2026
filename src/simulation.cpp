@@ -1,4 +1,6 @@
 #include "simulation.h"
+#include "fp_ops.h"
+#include <cstdint>
 
 Result runSimulation(
     uint32_t cycles,
@@ -10,9 +12,6 @@ Result runSimulation(
     Request* requests
 ) {
     (void)tracefile;
-    (void)sizeExponent;
-    (void)sizeMantissa;
-    (void)roundMode;
 
     Result result;
     result.cycles = cycles;
@@ -23,57 +22,50 @@ Result runSimulation(
     result.inexacts = 0;
     result.nans = 0;
 
+    FPUtils utils(sizeExponent, sizeMantissa);
+
     for (uint32_t i = 0; i < numRequests; i++) {
-        uint32_t ro = 0;
+        bool zero = false;
+        bool sign = false;
+        bool overflow = false;
+        bool underflow = false;
+        bool inexact = false;
+        bool nan = false;
 
-        switch(requests[i].op) {
-            case 8:
-            ro = requests[i].r1 + requests[i].r2;
-            break;
-
-            case 9:
-            ro = requests[i].r1 - requests[i].r2;
-            break;
-
-            case 10:
-            ro = requests[i].r1 * requests[i].r2;
-            break;
-
-            case 13:
-            if (requests[i].r1 < requests[i].r2) {
-                ro = requests[i].r1;
-            }
-            else{
-                ro = requests[i].r2;
-            }
-            break;
-
-            case 14:
-            if (requests[i].r1 > requests[i].r2) {
-                ro = requests[i].r1;
-            }
-            else{
-                ro = requests[i].r2;
-            }
-            break;
-
-            case 15:
-            ro = requests[i].r1 + (requests[i].r2 * requests[i].r3);
-            break;
-
-            default: 
-            ro = 0;
-            break;
-        }
+        uint32_t ro = FPOps::execute(
+            requests[i].op,
+            requests[i].r1,
+            requests[i].r2,
+            requests[i].r3,
+            utils,
+            roundMode,
+            zero,
+            sign,
+            overflow,
+            underflow,
+            inexact,
+            nan
+        );
 
         requests[i].ro = ro;
 
-        if (ro == 0){
+        if (zero) {
             result.zeros++;
         }
-
-        if (((ro >> 31) & 1) != 0) {
+        if (sign) {
             result.signs++;
+        }
+        if (overflow) {
+            result.overflows++;
+        }
+        if (underflow) {
+            result.underflows++;
+        }
+        if (inexact) {
+            result.inexacts++;
+        }
+        if (nan) {
+            result.nans++;
         }
     }
     return result;
