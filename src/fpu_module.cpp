@@ -1,5 +1,23 @@
 #include "fpu_module.hpp"
+
 #include "fp_ops.h"
+#include "fp_utils.h"
+#include <cstdint>
+
+
+FLOATING_POINT_UNIT::FLOATING_POINT_UNIT(
+    sc_module_name name,
+    uint8_t sizeExponent,
+    uint8_t sizeMantissa,
+    uint8_t roundMode
+) : sc_module(name),
+sizeExponent(sizeExponent),
+sizeMantissa(sizeMantissa),
+roundMode(roundMode) {
+    SC_THREAD(behaviour);
+    sensitive << clk.pos();
+}
+
 
 void FLOATING_POINT_UNIT::behaviour() {
     while(true) {
@@ -43,3 +61,23 @@ void FLOATING_POINT_UNIT::behaviour() {
         nan.write(nanFlag);
     }
 }
+
+uint32_t FLOATING_POINT_UNIT::getPositiveInf() {
+            FPUtils utils(sizeExponent, sizeMantissa);
+            return utils.getPositiveInf();
+        }
+
+        uint32_t FLOATING_POINT_UNIT::getNegativeInf() {
+            FPUtils utils(sizeExponent, sizeMantissa);
+            return utils.getNegativeInf();
+        }
+
+        double FLOATING_POINT_UNIT::getMax() {
+            FPUtils utils(sizeExponent, sizeMantissa);
+            return utils.getMax();
+        }
+
+        double FLOATING_POINT_UNIT::getMin() {
+            FPUtils utils(sizeExponent, sizeMantissa);
+            return utils.getMin();
+        }

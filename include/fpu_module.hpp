@@ -1,6 +1,7 @@
 #ifndef FPU_MODULE_HPP
 #define FPU_MODULE_HPP
 
+#include <cstdint>
 #include <systemc>
 #include <systemc.h>
 #include <stdint.h>
@@ -21,24 +22,26 @@ SC_MODULE(FLOATING_POINT_UNIT) {
     sc_out<bool> inexact;
     sc_out<bool> nan;
 
-    uint8_t sizeExponent = 8;
-    uint8_t sizeMantissa = 23;
-    uint8_t roundMode = 0;
+    SC_HAS_PROCESS(FLOATING_POINT_UNIT);
 
-    SC_CTOR(FLOATING_POINT_UNIT) {
-        SC_THREAD(behaviour);
-        sensitive << clk.pos();
-    }
+    FLOATING_POINT_UNIT(
+        sc_module_name name,
+        uint8_t sizeExponent,
+        uint8_t sizeMantissa,
+        uint8_t roundMode
+    );
 
     void behaviour();
 
+    uint32_t getPositiveInf();
+    uint32_t getNegativeInf();
+    double getMax();
+    double getMin();
+
 private: 
-    static const uint8_t OP_FADD = 8;
-    static const uint8_t OP_FSUB = 9;
-    static const uint8_t OP_FMUL = 10;
-    static const uint8_t OP_FMIN = 13;
-    static const uint8_t OP_FMAX = 14;
-    static const uint8_t OP_FMA = 15;
+    uint8_t sizeExponent;
+    uint8_t sizeMantissa;
+    uint8_t roundMode;
 };
 
 #endif
