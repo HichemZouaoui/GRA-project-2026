@@ -1,6 +1,8 @@
 #include "simulation.h"
 #include "fp_ops.h"
 #include <cstdint>
+#include <fstream>
+#include <string>
 
 Result runSimulation(
     uint32_t cycles,
@@ -11,7 +13,10 @@ Result runSimulation(
     uint32_t numRequests,
     Request* requests
 ) {
-    (void)tracefile;
+    if (tracefile != nullptr) {
+        std::string filename = std::string(tracefile) + ".vcd";
+        std::ofstream file(filename.c_str());
+    }
 
     Result result;
     result.cycles = cycles;
