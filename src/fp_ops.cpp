@@ -110,6 +110,58 @@ uint32_t FPOps::execute(
         );
 
         case OP_FMUL:
+        if (utils.isZero(r1) && utils.isNaN(r2)) {
+            if(utils.getSign(r1)) {
+                return finalResult(
+                    utils.getNegativeZero(),
+                    utils,
+                    zero,
+                    sign,
+                    overflow,
+                    underflow,
+                    inexact,
+                    nan
+                );
+            }
+
+            return finalResult(
+                utils.getPositiveZero(),
+                utils,
+                zero,
+                sign,
+                overflow,
+                underflow,
+                inexact,
+                nan
+            );
+        }
+
+        if (utils.isNaN(r1) && utils.isZero(r2)) {
+            if (utils.getSign(r2)) {
+                return finalResult(
+                    utils.getNegativeZero(),
+                    utils,
+                    zero,
+                    sign,
+                    overflow,
+                    underflow,
+                    inexact,
+                    nan
+                );
+            }
+
+            return finalResult(
+                utils.getPositiveZero(),
+                utils,
+                zero,
+                sign,
+                overflow,
+                underflow,
+                inexact,
+                nan
+            );
+        }
+
         return finalComputedResult(
                     a*b,
                     utils,

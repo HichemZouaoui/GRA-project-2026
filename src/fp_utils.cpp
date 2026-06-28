@@ -244,23 +244,13 @@ uint32_t FPUtils::encode(long double value, uint8_t roundMode, bool* inexact) co
     bool localInexact = false;
 
     if (storedExponent <= 0) {
-        long double scaled = std::ldexp(absValue, static_cast<int>(sizeMantissa) + static_cast<int>(getBias()) - 1);
-        uint64_t roundedMantissa = roundToUint64(scaled, roundMode, sign, localInexact);
-
-        if (inexact != nullptr && localInexact) {
+        if (inexact != nullptr) {
             *inexact = true;
         }
-
-        if (roundedMantissa == 0) {
-            if (sign) {
-                return getNegativeZero();
-            }
-            return getPositiveZero();
+        if (sign) {
+            return getNegativeZero();
         }
-        if (roundedMantissa >= (1ULL << sizeMantissa)) {
-            return pack(sign, 1, 0);
-        }
-        return pack(sign, 0, static_cast<uint32_t>(roundedMantissa));
+        return getPositiveZero();
     }
     if (storedExponent >= static_cast<int>(getMaxExponent())) {
         if (inexact != nullptr) {
