@@ -1,7 +1,8 @@
 #include "fp_ops.h"
+#include "fma_core.h"
 
 #include <cmath>
-#include <limits>
+
 
 static const uint8_t OP_FADD = 8;
 static const uint8_t OP_FSUB = 9;
@@ -299,17 +300,18 @@ uint32_t FPOps::execute(
             );
         
         case OP_FMA:
-        return finalComputedResult(
-            a + (b * c),
-            utils,
+        return FMACore::executeFMA(
+            r1, 
+            r2, 
+            r3, 
+            utils, 
             roundMode,
-            zero,
-            sign,
-            overflow,
-            underflow,
+            zero, 
+            sign, 
+            overflow, 
+            underflow, 
             inexact,
-            nan
-        );
+            nan);
 
         default:
         return finalResult(
