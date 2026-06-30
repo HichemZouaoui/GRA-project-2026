@@ -57,6 +57,6 @@ uint64_t hiddenBit(const FPUtils& utils);
 uint64_t mantissaMask(const FPUtils& utils);
 uint32_t maxExponentField(const FPUtils& utils);
 
-} // namespace fp_internal
+} 
 
 #endif

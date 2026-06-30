@@ -53,7 +53,6 @@ UnpackedFloat unpackBits(uint32_t bits, const FPUtils& utils) {
     }
 
     if (exponentField == 0 && mantissaField != 0) {
-        // Subnormals are not required in the project, so keep the sign and flush to zero.
         value.cls = CLASS_ZERO;
         return value;
     }
@@ -233,4 +232,4 @@ uint8_t bitLength64(uint64_t value) {
     return length;
 }
 
-} // namespace fp_internal
+} 

@@ -377,6 +377,110 @@ static uint32_t computeFiniteAdd(
     );
 }
 
+static bool handleMulSpecialCases(
+    uint32_t leftBits,
+    uint32_t rightBits,
+    const FPUtils& utils,
+    uint32_t& result
+) {
+    fp_internal::UnpackedFloat left = fp_internal::unpackBits(leftBits, utils);
+    fp_internal::UnpackedFloat right = fp_internal::unpackBits(rightBits, utils);
+    bool resultSign = left.sign != right.sign;
+
+    if (left.cls == fp_internal::CLASS_ZERO && right.cls == fp_internal::CLASS_NAN) {
+        result = fp_internal::makeZero(left.sign, utils);
+        return true;
+    }
+
+    if (left.cls == fp_internal::CLASS_NAN && right.cls == fp_internal::CLASS_ZERO) {
+        result = fp_internal::makeZero(right.sign, utils);
+        return true;
+    }
+
+    if (left.cls == fp_internal::CLASS_NAN || right.cls == fp_internal::CLASS_NAN) {
+        result = fp_internal::makeNaN(utils);
+        return true;
+    }
+
+    if (left.cls == fp_internal::CLASS_INF && right.cls == fp_internal::CLASS_ZERO) {
+        result = fp_internal::makeNaN(utils);
+        return true;
+    }
+
+    if (left.cls == fp_internal::CLASS_ZERO && right.cls == fp_internal::CLASS_INF) {
+        result = fp_internal::makeNaN(utils);
+        return true;
+    }
+
+    if (left.cls == fp_internal::CLASS_INF || right.cls == fp_internal::CLASS_INF) {
+        result = fp_internal::makeInf(resultSign, utils);
+        return true;
+    }
+
+    if (left.cls == fp_internal::CLASS_ZERO || right.cls == fp_internal::CLASS_ZERO) {
+        result = fp_internal::makeZero(resultSign, utils);
+        return true;
+    }
+
+    return false;
+}
+
+static uint64_t productToSignificandWithExtra(uint64_t product, const FPUtils& utils) {
+    static const uint8_t EXTRA_BITS = 3;
+
+    uint8_t mantissaBits = utils.getSizeMantissa();
+
+    if (mantissaBits >= EXTRA_BITS) {
+        uint32_t shift = mantissaBits - EXTRA_BITS;
+        fp_internal::ShiftRightResult shifted =
+            fp_internal::shiftRightWithSticky(product, shift);
+
+        if (shifted.sticky) {
+            shifted.value = shifted.value | 1ULL;
+        }
+
+        return shifted.value;
+    }
+
+    return product << (EXTRA_BITS - mantissaBits);
+}
+
+static uint32_t computeFiniteMul(
+    uint32_t leftBits,
+    uint32_t rightBits,
+    const FPUtils& utils,
+    uint8_t roundMode,
+    bool& zero,
+    bool& sign,
+    bool& overflow,
+    bool& underflow,
+    bool& inexact,
+    bool& nan
+) {
+    fp_internal::UnpackedFloat left = fp_internal::unpackBits(leftBits, utils);
+    fp_internal::UnpackedFloat right = fp_internal::unpackBits(rightBits, utils);
+
+    bool resultSign = left.sign != right.sign;
+    int64_t resultExponent = left.exponent + right.exponent;
+
+    uint64_t product = left.significand * right.significand;
+    uint64_t productWithExtra = productToSignificandWithExtra(product, utils);
+
+    return finishFiniteAddResult(
+        resultSign,
+        resultExponent,
+        productWithExtra,
+        utils,
+        roundMode,
+        zero,
+        sign,
+        overflow,
+        underflow,
+        inexact,
+        nan
+    );
+}
+
 uint32_t FPOps::execute(
     uint8_t op,
     uint32_t r1,
@@ -454,73 +558,33 @@ uint32_t FPOps::execute(
         }
 
         case OP_FMUL:
-        if (utils.isZero(r1) && utils.isNaN(r2)) {
-            if(utils.getSign(r1)) {
-                return finalResult(
-                    utils.getNegativeZero(),
-                    utils,
-                    zero,
-                    sign,
-                    overflow,
-                    underflow,
-                    inexact,
-                    nan
-                );
-            }
-
-            return finalResult(
-                utils.getPositiveZero(),
-                utils,
-                zero,
-                sign,
-                overflow,
-                underflow,
-                inexact,
-                nan
-            );
-        }
-
-        if (utils.isNaN(r1) && utils.isZero(r2)) {
-            if (utils.getSign(r2)) {
-                return finalResult(
-                    utils.getNegativeZero(),
-                    utils,
-                    zero,
-                    sign,
-                    overflow,
-                    underflow,
-                    inexact,
-                    nan
-                );
-            }
-
-            return finalResult(
-                utils.getPositiveZero(),
-                utils,
-                zero,
-                sign,
-                overflow,
-                underflow,
-                inexact,
-                nan
-            );
-        }
-
         {
-            long double a = utils.decode(r1);
-            long double b = utils.decode(r2);
+            uint32_t specialResult = 0;
+            if (handleMulSpecialCases(r1, r2, utils, specialResult)) {
+                return finalResult(
+                    specialResult,
+                    utils,
+                    zero,
+                    sign,
+                    overflow,
+                    underflow,
+                    inexact,
+                    nan
+                );
+            }
 
-            return finalComputedResult(
-                        a*b,
-                        utils,
-                        roundMode,
-                        zero,
-                        sign,
-                        overflow,
-                        underflow,
-                        inexact,
-                        nan
-                    );
+            return computeFiniteMul(
+                r1,
+                r2,
+                utils,
+                roundMode,
+                zero,
+                sign,
+                overflow,
+                underflow,
+                inexact,
+                nan
+            );
         }
 
         case OP_FMIN:

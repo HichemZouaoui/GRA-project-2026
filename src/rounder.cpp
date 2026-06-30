@@ -56,7 +56,6 @@ uint32_t Rounder::roundMantissa(
         bool increment = false;
         bool keptLeastSignificantBit = (kept & 1ULL) != 0;
 
-        // guard/round/sticky decide whether the kept mantissa moves up by one.
         switch (roundMode) {
             case 0:
             if (guardBit && (roundBit || stickyBit || keptLeastSignificantBit)) {
