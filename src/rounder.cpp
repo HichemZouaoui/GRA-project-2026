@@ -1,6 +1,27 @@
 #include "rounder.h"
 #include <cstdint>
 
+static bool getBit(uint64_t value, uint8_t bitIndex) {
+    if (bitIndex >= 64) {
+        return false;
+    }
+
+    return ((value >> bitIndex) & 1ULL) != 0;
+}
+
+static bool hasAnyLowerBit(uint64_t value, uint8_t bitCount) {
+    if (bitCount == 0) {
+        return false;
+    }
+
+    if (bitCount >= 64) {
+        return value != 0;
+    }
+
+    uint64_t mask = (1ULL << bitCount) - 1ULL;
+    return (value & mask) != 0;
+}
+
 uint32_t Rounder::roundMantissa(
     uint64_t value, 
     uint8_t discardedBits, 
@@ -12,31 +33,40 @@ uint32_t Rounder::roundMantissa(
             return static_cast<uint32_t>(value);
         }
 
-        uint64_t kept = value >> discardedBits;
-        uint64_t mask = (1ULL << discardedBits) - 1ULL;
-        uint64_t discarded = value & mask;
+        uint64_t kept = 0;
+        if (discardedBits < 64) {
+            kept = value >> discardedBits;
+        }
 
-        inexact = discarded != 0;
+        bool guardBit = getBit(value, static_cast<uint8_t>(discardedBits - 1));
+        bool roundBit = false;
+        bool stickyBit = false;
+
+        if (discardedBits >= 2) {
+            roundBit = getBit(value, static_cast<uint8_t>(discardedBits - 2));
+            stickyBit = hasAnyLowerBit(value, static_cast<uint8_t>(discardedBits - 2));
+        }
+
+        inexact = guardBit || roundBit || stickyBit;
 
         if (!inexact) {
             return static_cast<uint32_t>(kept);
         }
 
-        uint64_t half = 1ULL << (discardedBits - 1);
+        bool increment = false;
+        bool keptLeastSignificantBit = (kept & 1ULL) != 0;
 
+        // guard/round/sticky decide whether the kept mantissa moves up by one.
         switch (roundMode) {
             case 0:
-            if (discarded > half) {
-                kept++;
-            }
-            else if (discarded == half && (kept % 2ULL) != 0) {
-                kept++;
+            if (guardBit && (roundBit || stickyBit || keptLeastSignificantBit)) {
+                increment = true;
             }
             break;
 
             case 1: 
-            if (discarded >= half) {
-                kept++;
+            if (guardBit) {
+                increment = true;
             }
             break;
 
@@ -44,20 +74,25 @@ uint32_t Rounder::roundMantissa(
             break;
 
             case 3:
-            if (!sign) {
-                kept++;
+            if (!sign && inexact) {
+                increment = true;
             }
             break;
 
             case 4:
-            if (sign) {
-                kept++;
+            if (sign && inexact) {
+                increment = true;
             }
             break;
 
             default:
             break;
         }
+
+        if (increment) {
+            kept++;
+        }
+
         return static_cast<uint32_t>(kept);
     }
 
