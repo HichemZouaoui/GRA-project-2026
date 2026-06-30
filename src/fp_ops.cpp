@@ -3,9 +3,6 @@
 #include "fp_internal.h"
 #include "rounder.h"
 
-#include <cmath>
-
-
 static const uint8_t OP_FADD = 8;
 static const uint8_t OP_FSUB = 9;
 static const uint8_t OP_FMUL = 10;
@@ -31,39 +28,6 @@ static uint32_t finalResult(
     nan = utils.isNaN(result);
 
     return result;
-}
-
-static uint32_t finalComputedResult(
-    long double exactResult,
-    const FPUtils& utils,
-    uint8_t roundMode,
-    bool& zero,
-    bool& sign,
-    bool& overflow,
-    bool& underflow,
-    bool& inexact,
-    bool& nan
-) {
-    bool localInexact = false;
-
-    long double absResult = std::fabs(exactResult);
-    underflow = 
-        !std::isnan(exactResult) &&
-        !std::isinf(exactResult) &&
-        absResult != 0.0L &&
-        absResult < static_cast<long double>(utils.getMin());
-
-    uint32_t result = utils.encode(exactResult, roundMode, &localInexact);
-
-    zero = utils.isZero(result);
-    sign = utils.getSign(result);
-    overflow = 
-    !std::isnan(exactResult) && !std::isinf(exactResult) && utils.isInf(result);
-
-    inexact = localInexact;
-    nan = utils.isNaN(result);
-    return result;
-
 }
 
 static int compareByValue(
