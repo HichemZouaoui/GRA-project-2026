@@ -1,6 +1,7 @@
 #include "fp_ops.h"
 #include "fma_core.h"
 #include "fp_internal.h"
+#include "rounder.h"
 
 #include <cmath>
 
@@ -155,6 +156,227 @@ static bool handleAddSpecialCases(
     return false;
 }
 
+static uint64_t shiftRightOneWithSticky(uint64_t value) {
+    bool droppedBit = (value & 1ULL) != 0;
+    uint64_t shifted = value >> 1;
+
+    if (droppedBit) {
+        shifted = shifted | 1ULL;
+    }
+
+    return shifted;
+}
+
+static uint64_t alignSignificand(uint64_t significandWithExtra, uint32_t shift) {
+    fp_internal::ShiftRightResult shifted =
+        fp_internal::shiftRightWithSticky(significandWithExtra, shift);
+
+    if (shifted.sticky) {
+        shifted.value = shifted.value | 1ULL;
+    }
+
+    return shifted.value;
+}
+
+static uint32_t finishFiniteAddResult(
+    bool resultSign,
+    int64_t resultExponent,
+    uint64_t significandWithExtra,
+    const FPUtils& utils,
+    uint8_t roundMode,
+    bool& zero,
+    bool& sign,
+    bool& overflow,
+    bool& underflow,
+    bool& inexact,
+    bool& nan
+) {
+    static const uint8_t EXTRA_BITS = 3;
+
+    if (significandWithExtra == 0) {
+        uint32_t zeroResult = fp_internal::makeZero(roundMode == 4, utils);
+        return finalResult(
+            zeroResult,
+            utils,
+            zero,
+            sign,
+            overflow,
+            underflow,
+            inexact,
+            nan
+        );
+    }
+
+    uint64_t hiddenBit = fp_internal::hiddenBit(utils);
+    uint64_t normalBitWithExtra = hiddenBit << EXTRA_BITS;
+    uint64_t carryBitWithExtra = hiddenBit << (EXTRA_BITS + 1);
+
+    while (significandWithExtra >= carryBitWithExtra) {
+        significandWithExtra = shiftRightOneWithSticky(significandWithExtra);
+        resultExponent++;
+    }
+
+    while (significandWithExtra < normalBitWithExtra) {
+        significandWithExtra = significandWithExtra << 1;
+        resultExponent--;
+    }
+
+    int64_t exponentField =
+        resultExponent + static_cast<int64_t>(utils.getBias());
+
+    if (exponentField <= 0) {
+        uint32_t zeroResult = fp_internal::makeZero(resultSign, utils);
+
+        zero = true;
+        sign = resultSign;
+        overflow = false;
+        underflow = true;
+        inexact = true;
+        nan = false;
+
+        return zeroResult;
+    }
+
+    bool localInexact = false;
+    uint32_t roundedSignificand = Rounder::roundMantissa(
+        significandWithExtra,
+        EXTRA_BITS,
+        roundMode,
+        resultSign,
+        localInexact
+    );
+
+    if (roundedSignificand >= static_cast<uint32_t>(hiddenBit << 1)) {
+        roundedSignificand = roundedSignificand >> 1;
+        resultExponent++;
+        exponentField = resultExponent + static_cast<int64_t>(utils.getBias());
+    }
+
+    if (exponentField >= static_cast<int64_t>(fp_internal::maxExponentField(utils))) {
+        uint32_t infResult = fp_internal::makeInf(resultSign, utils);
+
+        zero = false;
+        sign = resultSign;
+        overflow = true;
+        underflow = false;
+        inexact = true;
+        nan = false;
+
+        return infResult;
+    }
+
+    if (exponentField <= 0) {
+        uint32_t zeroResult = fp_internal::makeZero(resultSign, utils);
+
+        zero = true;
+        sign = resultSign;
+        overflow = false;
+        underflow = true;
+        inexact = true;
+        nan = false;
+
+        return zeroResult;
+    }
+
+    uint32_t mantissa =
+        static_cast<uint32_t>(roundedSignificand & fp_internal::mantissaMask(utils));
+    uint32_t result = utils.pack(
+        resultSign,
+        static_cast<uint32_t>(exponentField),
+        mantissa
+    );
+
+    zero = false;
+    sign = resultSign;
+    overflow = false;
+    underflow = false;
+    inexact = localInexact;
+    nan = false;
+
+    return result;
+}
+
+static uint32_t computeFiniteAdd(
+    uint32_t leftBits,
+    uint32_t rightBits,
+    const FPUtils& utils,
+    uint8_t roundMode,
+    bool& zero,
+    bool& sign,
+    bool& overflow,
+    bool& underflow,
+    bool& inexact,
+    bool& nan
+) {
+    static const uint8_t EXTRA_BITS = 3;
+
+    fp_internal::UnpackedFloat left = fp_internal::unpackBits(leftBits, utils);
+    fp_internal::UnpackedFloat right = fp_internal::unpackBits(rightBits, utils);
+
+    int64_t resultExponent = left.exponent;
+    uint64_t leftSignificand = left.significand << EXTRA_BITS;
+    uint64_t rightSignificand = right.significand << EXTRA_BITS;
+
+    if (left.exponent > right.exponent) {
+        uint32_t shift = static_cast<uint32_t>(left.exponent - right.exponent);
+        rightSignificand = alignSignificand(rightSignificand, shift);
+        resultExponent = left.exponent;
+    }
+    else if (right.exponent > left.exponent) {
+        uint32_t shift = static_cast<uint32_t>(right.exponent - left.exponent);
+        leftSignificand = alignSignificand(leftSignificand, shift);
+        resultExponent = right.exponent;
+    }
+
+    bool resultSign = false;
+    uint64_t resultSignificand = 0;
+
+    if (left.sign == right.sign) {
+        resultSign = left.sign;
+        resultSignificand = leftSignificand + rightSignificand;
+    }
+    else {
+        int magnitudeCompare = fp_internal::compareMagnitude(left, right);
+
+        if (magnitudeCompare == 0) {
+            uint32_t zeroResult = fp_internal::makeZero(roundMode == 4, utils);
+            return finalResult(
+                zeroResult,
+                utils,
+                zero,
+                sign,
+                overflow,
+                underflow,
+                inexact,
+                nan
+            );
+        }
+
+        if (magnitudeCompare > 0) {
+            resultSign = left.sign;
+            resultSignificand = leftSignificand - rightSignificand;
+        }
+        else {
+            resultSign = right.sign;
+            resultSignificand = rightSignificand - leftSignificand;
+        }
+    }
+
+    return finishFiniteAddResult(
+        resultSign,
+        resultExponent,
+        resultSignificand,
+        utils,
+        roundMode,
+        zero,
+        sign,
+        overflow,
+        underflow,
+        inexact,
+        nan
+    );
+}
+
 uint32_t FPOps::execute(
     uint8_t op,
     uint32_t r1,
@@ -186,12 +408,9 @@ uint32_t FPOps::execute(
                 );
             }
 
-            // Finite normal arithmetic is still the old path for now.
-            long double a = utils.decode(r1);
-            long double b = utils.decode(r2);
-
-            return finalComputedResult(
-                a+b,
+            return computeFiniteAdd(
+                r1,
+                r2,
                 utils,
                 roundMode,
                 zero,
@@ -220,12 +439,9 @@ uint32_t FPOps::execute(
                 );
             }
 
-            // Finite normal arithmetic is still the old path for now.
-            long double a = utils.decode(r1);
-            long double b = utils.decode(r2);
-
-            return finalComputedResult(
-                a-b,
+            return computeFiniteAdd(
+                r1,
+                negativeR2,
                 utils,
                 roundMode,
                 zero,
