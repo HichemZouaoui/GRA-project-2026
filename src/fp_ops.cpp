@@ -89,6 +89,72 @@ static int compareByValue(
     return magnitudeCompare;
 }
 
+static uint32_t flipSignBit(uint32_t bits, const FPUtils& utils) {
+    uint32_t signMask = 1U << (utils.getSizeExponent() + utils.getSizeMantissa());
+    return bits ^ signMask;
+}
+
+static bool handleAddSpecialCases(
+    uint32_t leftBits,
+    uint32_t rightBits,
+    const FPUtils& utils,
+    uint8_t roundMode,
+    uint32_t& result
+) {
+    fp_internal::UnpackedFloat left = fp_internal::unpackBits(leftBits, utils);
+    fp_internal::UnpackedFloat right = fp_internal::unpackBits(rightBits, utils);
+
+    if (left.cls == fp_internal::CLASS_NAN || right.cls == fp_internal::CLASS_NAN) {
+        result = fp_internal::makeNaN(utils);
+        return true;
+    }
+
+    if (left.cls == fp_internal::CLASS_INF && right.cls == fp_internal::CLASS_INF) {
+        if (left.sign == right.sign) {
+            result = fp_internal::makeInf(left.sign, utils);
+        }
+        else {
+            result = fp_internal::makeNaN(utils);
+        }
+        return true;
+    }
+
+    if (left.cls == fp_internal::CLASS_INF) {
+        result = fp_internal::makeInf(left.sign, utils);
+        return true;
+    }
+
+    if (right.cls == fp_internal::CLASS_INF) {
+        result = fp_internal::makeInf(right.sign, utils);
+        return true;
+    }
+
+    if (left.cls == fp_internal::CLASS_ZERO && right.cls == fp_internal::CLASS_ZERO) {
+        if (left.sign == right.sign) {
+            result = fp_internal::makeZero(left.sign, utils);
+        }
+        else if (roundMode == 4) {
+            result = fp_internal::makeZero(true, utils);
+        }
+        else {
+            result = fp_internal::makeZero(false, utils);
+        }
+        return true;
+    }
+
+    if (left.cls == fp_internal::CLASS_ZERO && right.cls == fp_internal::CLASS_NORMAL) {
+        result = rightBits;
+        return true;
+    }
+
+    if (left.cls == fp_internal::CLASS_NORMAL && right.cls == fp_internal::CLASS_ZERO) {
+        result = leftBits;
+        return true;
+    }
+
+    return false;
+}
+
 uint32_t FPOps::execute(
     uint8_t op,
     uint32_t r1,
@@ -106,6 +172,21 @@ uint32_t FPOps::execute(
     switch (op) {
         case OP_FADD:
         {
+            uint32_t specialResult = 0;
+            if (handleAddSpecialCases(r1, r2, utils, roundMode, specialResult)) {
+                return finalResult(
+                    specialResult,
+                    utils,
+                    zero,
+                    sign,
+                    overflow,
+                    underflow,
+                    inexact,
+                    nan
+                );
+            }
+
+            // Finite normal arithmetic is still the old path for now.
             long double a = utils.decode(r1);
             long double b = utils.decode(r2);
 
@@ -124,6 +205,22 @@ uint32_t FPOps::execute(
         
         case OP_FSUB:
         {
+            uint32_t specialResult = 0;
+            uint32_t negativeR2 = flipSignBit(r2, utils);
+            if (handleAddSpecialCases(r1, negativeR2, utils, roundMode, specialResult)) {
+                return finalResult(
+                    specialResult,
+                    utils,
+                    zero,
+                    sign,
+                    overflow,
+                    underflow,
+                    inexact,
+                    nan
+                );
+            }
+
+            // Finite normal arithmetic is still the old path for now.
             long double a = utils.decode(r1);
             long double b = utils.decode(r2);
 
