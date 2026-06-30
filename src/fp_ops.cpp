@@ -1,5 +1,6 @@
 #include "fp_ops.h"
 #include "fma_core.h"
+#include "fp_internal.h"
 
 #include <cmath>
 
@@ -64,6 +65,30 @@ static uint32_t finalComputedResult(
 
 }
 
+static int compareByValue(
+    uint32_t leftBits,
+    uint32_t rightBits,
+    const FPUtils& utils
+) {
+    fp_internal::UnpackedFloat left = fp_internal::unpackBits(leftBits, utils);
+    fp_internal::UnpackedFloat right = fp_internal::unpackBits(rightBits, utils);
+
+    if (left.sign != right.sign) {
+        if (left.sign) {
+            return -1;
+        }
+        return 1;
+    }
+
+    int magnitudeCompare = fp_internal::compareMagnitude(left, right);
+
+    if (left.sign) {
+        return -magnitudeCompare;
+    }
+
+    return magnitudeCompare;
+}
+
 uint32_t FPOps::execute(
     uint8_t op,
     uint32_t r1,
@@ -78,36 +103,42 @@ uint32_t FPOps::execute(
     bool& inexact,
     bool& nan
 ) {
-    long double a = utils.decode(r1);
-    long double b = utils.decode(r2);
-    long double c = utils.decode(r3);
-
     switch (op) {
         case OP_FADD:
-        return finalComputedResult(
-            a+b,
-            utils,
-            roundMode,
-            zero,
-            sign,
-            overflow,
-            underflow,
-            inexact,
-            nan
-        );
+        {
+            long double a = utils.decode(r1);
+            long double b = utils.decode(r2);
+
+            return finalComputedResult(
+                a+b,
+                utils,
+                roundMode,
+                zero,
+                sign,
+                overflow,
+                underflow,
+                inexact,
+                nan
+            );
+        }
         
         case OP_FSUB:
-        return finalComputedResult(
-            a-b,
-            utils,
-            roundMode,
-            zero,
-            sign,
-            overflow,
-            underflow,
-            inexact,
-            nan
-        );
+        {
+            long double a = utils.decode(r1);
+            long double b = utils.decode(r2);
+
+            return finalComputedResult(
+                a-b,
+                utils,
+                roundMode,
+                zero,
+                sign,
+                overflow,
+                underflow,
+                inexact,
+                nan
+            );
+        }
 
         case OP_FMUL:
         if (utils.isZero(r1) && utils.isNaN(r2)) {
@@ -162,48 +193,27 @@ uint32_t FPOps::execute(
             );
         }
 
-        return finalComputedResult(
-                    a*b,
-                    utils,
-                    roundMode,
-                    zero,
-                    sign,
-                    overflow,
-                    underflow,
-                    inexact,
-                    nan
-                );
+        {
+            long double a = utils.decode(r1);
+            long double b = utils.decode(r2);
+
+            return finalComputedResult(
+                        a*b,
+                        utils,
+                        roundMode,
+                        zero,
+                        sign,
+                        overflow,
+                        underflow,
+                        inexact,
+                        nan
+                    );
+        }
 
         case OP_FMIN:
-        if (utils.isNaN(r1) && utils.isNaN(r2)) {
+        if (utils.isNaN(r1) || utils.isNaN(r2)) {
             return finalResult(
                 utils.getNaN(),
-                utils,
-                zero,
-                sign,
-                overflow,
-                underflow,
-                inexact,
-                nan
-            );
-        }
-
-        if (utils.isNaN(r1)) {
-            return finalResult(
-                r2,
-                utils,
-                zero,
-                sign,
-                overflow,
-                underflow,
-                inexact,
-                nan
-            );
-        }
-
-        if (utils.isNaN(r2)) {
-            return finalResult(
-                r1,
                 utils,
                 zero,
                 sign,
@@ -240,7 +250,7 @@ uint32_t FPOps::execute(
             );
         }
 
-        if (a < b) {
+        if (compareByValue(r1, r2, utils) <= 0) {
             return finalResult(
                 r1, 
                 utils, 
@@ -264,34 +274,9 @@ uint32_t FPOps::execute(
         );
     
         case OP_FMAX:
-        if (utils.isNaN(r1) && utils.isNaN(r2)) {
+        if (utils.isNaN(r1) || utils.isNaN(r2)) {
             return finalResult(
                 utils.getNaN(),
-                utils,
-                zero,
-                sign,
-                overflow,
-                underflow,
-                inexact,
-                nan
-            );
-        }
-
-        if (utils.isNaN(r1)) {
-            return finalResult(
-                r2,
-                utils,
-                zero,
-                sign,
-                overflow,
-                underflow,
-                inexact,
-                nan
-            );
-        }
-        if (utils.isNaN(r2)) {
-            return finalResult(
-                r1, 
                 utils,
                 zero,
                 sign,
@@ -328,7 +313,7 @@ uint32_t FPOps::execute(
             );
         }
 
-        if (a > b) {
+        if (compareByValue(r1, r2, utils) >= 0) {
             return finalResult(
                 r1,
                 utils,
